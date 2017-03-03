@@ -19,10 +19,10 @@
 
 DOCUMENTATION = '''
 ---
-module: ranger_hbase_policies
-short_description: Manage definition of HBase Policy in Apache Ranger
+module: ranger_hdfs_policies
+short_description: Manage definition of HDFS Policy in Apache Ranger
 description:
-     - This module will allow you to manage HBase policy in Apache Ranger. 
+     - This module will allow you to manage HDFS policy in Apache Ranger. 
      - Please refer to Apache Ranger documentation for authorization policy concept and usage.
 options:
   admin_url:
@@ -59,7 +59,7 @@ options:
     aliases: []
   service_name:
     description:
-      - In most cases, you should not need to set this parameter. It define the Ranger Admin HBase service, typically <yourClusterName>_hbase. 
+      - In most cases, you should not need to set this parameter. It define the Ranger Admin HDFS service, typically <yourClusterName>_hadoop. 
       - It must be set if there are several such services defined in your Ranger Admin configuration, to select the one you intend to use.  
     required: false
     default: None
@@ -82,21 +82,9 @@ options:
     required: true
     default: None
     aliases: []
-  policies[0..n].tables:
+  policies[0..n].paths:
     description:
-      - A list of HBase tables this policy will apply on. Accept wildcard characters '*' and '?'
-    required: true
-    default: None
-    aliases: []
-  policies[0..n].column_families:
-    description:
-      - A list of HBase column families this policy will apply on. Accept wildcard characters '*' and '?'.
-    required: true
-    default: None
-    aliases: []
-  policies[0..n].columns:
-    description:
-      - A list of HBase columns this policy will apply on. Accept wildcard characters '*' and '?'
+      - A list of HDFS path this policy will apply on. Accept wildcard characters '*' and '?'
     required: true
     default: None
     aliases: []
@@ -109,6 +97,12 @@ options:
   policies[0..n].audit:
     description:
       - Whether this policy is audited
+    required: false
+    default: True
+    aliases: []
+  policies[0..n].recursive:
+    description:
+      - Whether this policy is recursive
     required: false
     default: True
     aliases: []
@@ -143,6 +137,11 @@ options:
     default: False
     aliases: []
     
+    
+    
+    
+    
+      
 author:
     - "Serge ALEXANDRE"
 
@@ -151,43 +150,30 @@ author:
 
 EXAMPLES = '''
 
-# This playbook snippet will:
-# - Grant full rights to user 'user1' on all table in namespace 'ns1' ('ns1:*'). Including table creation and delegate admin.
-# - Grant RW rights to all users of group 'users' on the table 't1' of this namespace 'ns1'
-#
-# Note also how we handle Certificate bundle, by first copying it on the remote site.
-#
+# Grant full rights for user 'coxi' on folders '/apps/coxi01' and '/user/coxi01', in a recursive way
+
 - hosts: edge_node1
   roles:
   - ranger_modules
   tasks:
-  - name: Copy ca_bundle
-    copy: src=../rangersrv_cert.pem dest=/etc/security/rangersrc_cert.pem owner=root mode=0400
-  - name: Apply ranger HBase policy
-    ranger_hbase_policies:
+  - ranger_hdfs_policies:
       state: present
-      admin_url: https://ranger.mycompany.com:6182
+      admin_url: http://ranger.mycompany.com:6080
       admin_username: admin
       admin_password: admin
-      validate_certs: yes
-      ca_bundle_file: /etc/security/rangersrv_cert.pem
-      policies: 
-      - name: "[ns1]"
-        tables: [ "ns1:*" ]
-        column_families: [ "*" ] 
-        columns: [ "*" ] 
-        permissions: 
-        - users: [ "user1" ]
-          accesses: [ "read", "write", "create", "admin" ]
-          delegate_admin: True
-      - name: "[ns1:t1]"
-        tables: [ "ns1:t1" ]
-        column_families: [ "*" ] 
-        columns: [ "*" ] 
-        permissions: 
-        - groups: [ "users" ]
-          accesses: [ "read", "write" ]
-                    
+      policies:
+      - name: "coxi01"
+        paths: 
+        - "/apps/coxi01" 
+        - "/user/coxi01" 
+        permissions:
+        - users:
+          - coxi
+          accesses:
+          - Write
+          - read
+          - execute
+
           
 '''
 import warnings
@@ -228,8 +214,7 @@ class RangerAPI:
             return result
         else:
             error("Invalid returned http code '{0}' when calling GET on '{1}'".format(resp.status_code, url))
-    
-    
+
     
     def getServiceNameByType(self, stype, candidate=None):
         if self.serviceNamesByType == None:
@@ -431,22 +416,19 @@ def checkValidAttr(base, validAttrSet, prefix):
 
 def groom(policy):
     """
-    Check and Normalize target policy expression
+    Normalize target policy expression
     """
     if 'name' not in policy:
-        error("There is at least one HBase policy without name!")
+        error("There is at least one HDFS policy without name!")
     if not isinstance(policy["name"], basestring):
-        error("HBase policy: Attribute 'name' if of wrong type. Must by a string")
-    prefix = "HBase policy '{0}': ".format(policy['name'])
-        
-    checkValidAttr(policy, ['name', 'tables', 'column_families', 'columns', 'state', 'audit', 'enabled', 'permissions'], prefix)
-        
-    checkListOfStrNotEmpty(policy, "tables", prefix)        
-    checkListOfStrNotEmpty(policy, "column_families", prefix)        
-    checkListOfStrNotEmpty(policy, "columns", prefix)        
-    
-    checkEnumWithDefault(policy, 'state', Set(['present', 'absent']), 'present', prefix)
-    
+        error("HDFS policy: Attribute 'name' if of wrong type. Must by a string")
+    prefix = "HDFS policy '{0}': ".format(policy['name'])
+
+    checkValidAttr(policy, ['name', 'paths', 'recursive', 'audit', 'enabled', 'permissions'], prefix)
+            
+    checkListOfStrNotEmpty(policy, "paths", prefix)        
+
+    checkTypeWithDefault(policy, "recursive", bool, True, prefix)
     checkTypeWithDefault(policy, "audit", bool, True, prefix)
     checkTypeWithDefault(policy, "enabled", bool, True, prefix)
 
@@ -471,20 +453,10 @@ def newPolicy(tgtPolicy, service):
         'name': tgtPolicy['name'],
         'policyItems': [],
         'resources': { 
-            "column": { 
+            "path": { 
                 "isExcludes": False,
-                "isRecursive": False,
-                "values": tgtPolicy["columns"]
-            },
-            "column-family": { 
-                "isExcludes": False,
-                "isRecursive": False,
-                "values": tgtPolicy["column_families"]
-            },
-            "table": { 
-                "isExcludes": False,
-                "isRecursive": False,
-                "values": tgtPolicy["tables"]
+                "isRecursive": tgtPolicy["recursive"],
+                "values": tgtPolicy["paths"]
             }
         },
         'rowFilterPolicyItems': [],
@@ -498,9 +470,10 @@ def newPolicy(tgtPolicy, service):
         tp['groups'] = p['groups']
         tp['users'] = p['users']
         for a in p['accesses']:
-            tp['accesses'].append({ "isAllowed": True, "type": a.lower() })
+            tp['accesses'].append({ "isAllowed": True, "type": a.lower()})
         policy['policyItems'].append(tp)
     return policy
+
 
     
 rangerAPI = None
@@ -563,20 +536,20 @@ def main():
     rangerAPI =  RangerAPI(p.adminUrl, p.adminUsername , p.adminPassword , verify)
 
     result = {}
-    hbaseServiceName = rangerAPI.getServiceNameByType("hbase", p.serviceName)
+    hdfsServiceName = rangerAPI.getServiceNameByType("hdfs", p.serviceName)
     # Perform check before effective operation
     for tgtPolicy in p.policies:
         groom(tgtPolicy)    
     for tgtPolicy in p.policies:
         policyName = tgtPolicy['name']
         result[policyName] = {}
-        oldPolicies = rangerAPI.getPolicy(hbaseServiceName, policyName)
+        oldPolicies = rangerAPI.getPolicy(hdfsServiceName, policyName)
         #misc.ppprint(oldPolicies)
         if len(oldPolicies) > 1:
             error("More than one policy with name '{0}' !".format(policyName))
         if p.state == 'present':
             if len(oldPolicies) == 0:
-                policy = newPolicy(tgtPolicy, hbaseServiceName)
+                policy = newPolicy(tgtPolicy, hdfsServiceName)
                 #misc.ppprint(p)
                 rangerAPI.createPolicy(policy)
                 result[policyName]['action'] = "created"
@@ -584,7 +557,7 @@ def main():
             else:
                 oldPolicy = oldPolicies[0]
                 pid = oldPolicy["id"]
-                policy = newPolicy(tgtPolicy, hbaseServiceName)
+                policy = newPolicy(tgtPolicy, hdfsServiceName)
                 policy["id"] = pid
                 result[policyName]['id'] = pid
                 if isPolicyIdentical(oldPolicy, policy):

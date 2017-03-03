@@ -136,11 +136,6 @@ options:
     required: false
     default: False
     aliases: []
-    
-    
-    
-    
-    
       
 author:
     - "Serge ALEXANDRE"
@@ -158,7 +153,7 @@ EXAMPLES = '''
   tasks:
   - ranger_kafka_policies:
       state: present
-      admin_url: https://nn1.hdp13.bsa.broadsoftware.com:6182
+      admin_url: https://ranger.mycompany.com:6182
       admin_username: admin
       admin_password: admin
       validate_certs: no
@@ -567,13 +562,14 @@ def main():
     global rangerAPI
     rangerAPI =  RangerAPI(p.adminUrl, p.adminUsername , p.adminPassword , verify)
 
-
+    result = {}
     kafkaServiceName = rangerAPI.getServiceNameByType("kafka", p.serviceName)
     # Perform check before effective operation
     for tgtPolicy in p.policies:
         groom(tgtPolicy)    
     for tgtPolicy in p.policies:
         policyName = tgtPolicy['name']
+        result[policyName] = {}
         oldPolicies = rangerAPI.getPolicy(kafkaServiceName, policyName)
         #misc.ppprint(oldPolicies)
         if len(oldPolicies) > 1:
@@ -583,29 +579,33 @@ def main():
                 policy = newPolicy(tgtPolicy, kafkaServiceName)
                 #misc.ppprint(p)
                 rangerAPI.createPolicy(policy)
+                result[policyName]['action'] = "created"
                 p.changed = True
             else:
                 oldPolicy = oldPolicies[0]
                 pid = oldPolicy["id"]
                 policy = newPolicy(tgtPolicy, kafkaServiceName)
                 policy["id"] = pid
+                result[policyName]['id'] = pid
                 if isPolicyIdentical(oldPolicy, policy):
-                    pass
+                    result[policyName]['action'] = "none"
                 else:
+                    result[policyName]['action'] = "updated"
                     rangerAPI.updatePolicy(policy)
                     p.changed = True
                 #misc.ppprint(oldPolicy)
         elif p.state == 'absent':
             if len(oldPolicies) == 1:
                 rangerAPI.deletePolicy(oldPolicies[0]["id"])
+                result[policyName]['action'] = "deleted"
                 p.changed = True
+            else:
+                result[policyName]['action'] = "none"
     
     cleanup()
     module.exit_json(
-        #topics = p.topics,
-        #permissions = p.permissions,
-        #policies = p.policies,
-        changed = p.changed
+        changed = p.changed,
+        policies = result
     )
 
 

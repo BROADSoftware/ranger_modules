@@ -1,3 +1,4 @@
 eclipse.preferences.version=1
 encoding//library/ranger_hbase_policies.py=utf-8
+encoding//library/ranger_hdfs_policies.py=utf-8
 encoding//library/ranger_kafka_policies.py=utf-8

@@ -71,13 +71,14 @@ Options (= is mandatory):
 EXAMPLES:
 
 # Allow user 'app1' to publish to Kafka topic 'topic1'. And allow user 'app2' and all users belonging to groups 'grp1 and grp2 to consume.
+
 - hosts: edge_node1
   roles:
   - ranger_modules
   tasks:
   - ranger_kafka_policies:
       state: present
-      admin_url: https://nn1.hdp13.bsa.broadsoftware.com:6182
+      admin_url: https://ranger.mycompany.com:6182
       admin_username: admin
       admin_password: admin
       validate_certs: no
