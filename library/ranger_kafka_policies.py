@@ -231,9 +231,56 @@ def isPolicyIdentical(old, new):
             if not missing in ALLOWED_MISSING_ON_RIGHT:
                 return False
         return True
-        
 
-MANDATORY_ATTRS = [ "name",  "topics"]
+
+        
+# --------------------------------------------------------- Grooming helper function
+
+def checkListOfStrNotEmpty(base, attr, prefix):
+    if attr not in base:
+        error("{0}: Missing attribute '{1}'".format(prefix, attr))
+    if not isinstance(base[attr], list):
+        error("{0}: Attribute '{1}' if of wrong type. Must by a list".format(prefix, attr))
+    if len(base[attr]) == 0:
+        error("{0}: Attribute '{1}': Must have at least one items".format(prefix, attr))
+    for v in base[attr]:
+        if not isinstance(v, basestring) or len(v) == 0:
+            error("{0}: All items of list '{1}' must be non null string".format(prefix, attr))
+
+
+def checkListOfStr(base, attr, prefix):
+    if attr not in base:
+        base[attr] = []
+    else:
+        if not isinstance(base[attr], list):
+            error("{0}: Attribute '{1}' if of wrong type. Must by a list".format(prefix, attr))
+        for v in base[attr]:
+            if not isinstance(v, basestring) or len(v) == 0:
+                error("{0}: All items of list '{1}' must be non null string".format(prefix, attr))
+
+def checkTypeWithDefault(base, attr, typ, default, prefix):
+    if attr not in base:
+        base[attr] = default
+    else:
+        if not isinstance(base[attr], typ):
+            error("{0}: Attribute '{1}' if of wrong type. Must by a {2}".format(prefix, attr, typ))
+    
+def checkEnumWithDefault(base, attr, candidates, default, prefix):
+    if attr not in base:
+        base[attr] = default
+    else:
+        if not isinstance(base[attr], basestring):
+            error("{0}: Attribute '{1}' if of wrong type. Must by a string".format(prefix, attr))
+        else:
+            if not base[attr] in candidates:
+                error("{0}: Attribute '{1}' must be one of the following: {2}".format(prefix, attr, candidates))
+                
+def checkValidAttr(base, validAttrSet, prefix):
+    for attr in base:
+        if attr not in validAttrSet: 
+            error("{0}: Invalide attribute '{1}'. Must be one of {2}".format(prefix, attr, validAttrSet))                           
+
+
 
 def groom(policy):
     """
@@ -242,38 +289,27 @@ def groom(policy):
     if 'name' not in policy:
         error("There is an Kafka policy without name!")
     prefix = "Kafka policy '{0}': ".format(policy['name'])
-        
-    for attr in MANDATORY_ATTRS:
-        if attr not in policy:
-            error("{0}Missing attribute '{1}'".format(prefix, attr))
-        else:
-            if isinstance(policy[attr], list):
-                if len(policy[attr]) == 0:
-                    error("{0}Attribute '{1}' is a list which must have at least one value".format(prefix, attr))
-                else:
-                    if len(str(policy[attr])[0]) == 0:
-                        error("{0}Attribute '{1}' list value can't be empty".format(prefix, attr))
-            else:
-                if len(policy[attr]) == 0:
-                    error("{0}Attribute '{1}' can't be empty".format(prefix, attr))
-    
-    if 'audit' not in policy:
-        policy['audit'] = True
-    if 'enabled' not in policy:
-        policy['enabled'] = True
-    if 'permissions' not in policy:
-        policy['permissions'] = []
-    else:
-        for p in policy['permissions']:
-            if 'users' not in p:
-                p['users'] = []
-            if 'groups' not in p:
-                p['groups'] = []
-            if 'accesses' not in p:
-                p['accesses'] = []
-            if 'delegate_admin' not in p:
-                p['delegate_admin'] = False
 
+    checkValidAttr(policy, ['name', 'topics', 'state', 'recursive', 'audit', 'enabled', 'permissions'], prefix)
+
+    checkListOfStrNotEmpty(policy, "topics", prefix)        
+    
+    checkEnumWithDefault(policy, 'state', Set(['present', 'absent']), 'present', prefix)
+
+    checkTypeWithDefault(policy, "audit", bool, True, prefix)
+    checkTypeWithDefault(policy, "enabled", bool, True, prefix)
+    
+    checkTypeWithDefault(policy, "permissions", list, [], prefix)
+
+    for permission in policy['permissions']:
+        checkValidAttr(permission, ['users', 'groups', 'accesses', 'ip_ranges', 'delegate_admin'], prefix)
+        checkListOfStr(permission, 'users', prefix)
+        checkListOfStr(permission, 'groups', prefix)
+        checkListOfStr(permission, 'accesses', prefix)
+        checkListOfStr(permission, 'ip_ranges', prefix)
+        checkTypeWithDefault(permission, 'delegate_admin', bool, False, prefix)
+    
+        
 
 
 def newPolicy(tgtPolicy, service):
@@ -305,7 +341,7 @@ def newPolicy(tgtPolicy, service):
         tp['users'] = p['users']
         for a in p['accesses']:
             tp['accesses'].append({ "isAllowed": True, "type": a.lower() })
-        if 'ip_ranges' in p:
+        if 'ip_ranges' in p and len(p['ip_ranges']) > 0:
             tp['conditions'].append({ "type": "ip-range", "values": p['ip_ranges']})
         policy['policyItems'].append(tp)
     return policy
@@ -342,11 +378,6 @@ def main():
             ca_bundle_file = dict(required=False, type='str'),
             service_name = dict(required=False, type='str'),
             policies = dict(required=True, type='list')
-            #policy_name = dict(required=True, type='str'),
-            #enabled = dict(required=False, type='bool', default=True),
-            #audit = dict(required=False, type='bool', default=True),
-            #topics = dict(required=True, type='list'),
-            #permissions = dict(required=False, type='list'),
         ),
         supports_check_mode=True
     )
@@ -363,12 +394,6 @@ def main():
     p.ca_bundleFile = module.params['ca_bundle_file']
     p.serviceName = module.params['service_name']
     p.policies = module.params['policies']
-    #p.policyName = module.params['policy_name']
-    #p.enabled = module.params['enabled']
-    #p.audit = module.params['audit']
-    #p.topics = module.params['topics']
-    #p.permissions = module.params['permissions']
-    #p.checkMode = module.check_mode
     p.changed = False
 
     checkParameters(p)
