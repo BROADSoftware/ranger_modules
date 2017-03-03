@@ -20,17 +20,127 @@
 DOCUMENTATION = '''
 ---
 module: ranger_kafka_policies
-version_added: "historical"
-short_description: Manager definition of Kafka Policy in Apache Ranger
+short_description: Manage definition of Kafka Policy in Apache Ranger
 description:
-     - xxxxxx 
+     - This module will allow you to manage Kafka policy in Apache Ranger. 
+     - Please refer to Apache Ranger documentation for authorization policy concept and usage.
 options:
-  ranger_admin_url:
+  admin_url:
     description:
-      - xxxxx
+      - The Ranger base URL to access Ranger API. Same host:port as the Ranger Admin GUI. Typically http://myranger.server.com:6080 or https://myranger.server.com:6182  
     required: true
-    default: null
+    default: None
     aliases: []
+  admin_username:
+    description:
+      - The user name to log on the Ranger Admin. Must have enough rights to manage policies.
+    required: true
+    default: None
+    aliases: []
+  admin_password:
+    description:
+      - The password associated with the admin_username
+    required: true
+    default: None
+    aliases: []
+  validate_certs:
+    description:
+      - Useful if Ranger Admin connection is using SSL. If no, SSL certificates will not be validated. This should only be used on personally controlled sites using self-signed certificates.
+    required: false
+    default: True
+    aliases: []
+  ca_bundle_file:
+    description:
+      - Useful if Ranger Admin connection is using SSL. Allow to specify a CA_BUNDLE file, a file that contains root and intermediate certificates to validate the Ranger Admin certificate.
+      - In its simplest case, it could be a file containing the server certificate in .pem format.
+      - This file will be looked up on the remote system, on which this module will be executed. 
+    required: false
+    default: None
+    aliases: []
+  service_name:
+    description:
+      - In most cases, you should not need to set this parameter. It define the Ranger Admin Kafka service, typically <yourClusterName>_kafka. 
+      - It must be set if there are several such services defined in your Ranger Admin configuration, to select the one you intend to use.  
+    required: false
+    default: None
+    aliases: []
+  state:
+    description:
+      - Whether to install (present) or remove (absent) these policies
+    required: false
+    default: present
+    choices: [ present, absent ]
+  policies:
+    description:
+      - The list of policies you want to be defined by this operation.
+    required: true
+    default: None
+    aliases: []
+  policies[0..n].name:
+    description:
+      - The name of the policy. Must be unique across the system.
+    required: true
+    default: None
+    aliases: []
+  policies[0..n].topics:
+    description:
+      - A list of Kafka topics this policy will apply on. Accept wildcard characters '*' and '?'
+    required: true
+    default: None
+    aliases: []
+  policies[0..n].enabled:
+    description:
+      - Whether this policy is enabled.
+    required: false
+    default: True
+    aliases: []
+  policies[0..n].audit:
+    description:
+      - Whether this policy is audited
+    required: false
+    default: True
+    aliases: []
+  policies[0..n].permissions:
+    description:
+      - A list of permissions associated to this policy
+    required: True
+    default: None
+    aliases: []
+  policies[0..n].permissions[0..n].users:
+    description:
+      - A list of users this permission will apply on.
+    required: false
+    default: None
+    aliases: []
+  policies[0..n].permissions[0..n].groups:
+    description:
+      - A list of groups this permission will apply on.
+    required: false
+    default: None
+    aliases: []
+  policies[0..n].permissions[0..n].accesses:
+    description:
+      - A list of access right granted by this permission.
+    required: True
+    default: None
+    aliases: []
+  policies[0..n].permissions[0..n].ip_ranges:
+    description:
+      - A list of IP address or IP addresses range (In the form XXX.XXX.XXX.XXX/ZZ) to be bound to this permission
+    required: false
+    default: None
+    aliases: []
+  policies[0..n].permissions[0..n].delegate_admin:
+    description:
+      - When a policy is assigned to a user or a group of users those users become the delegated admin. The delegated admin can update, delete the policies. 
+    required: false
+    default: False
+    aliases: []
+    
+    
+    
+    
+    
       
 author:
     - "Serge ALEXANDRE"
@@ -40,7 +150,55 @@ author:
 
 EXAMPLES = '''
 
+# Allow user 'app1' to publish to Kafka topic 'topic1'. And allow user 'app2' and all users belonging to groups 'grp1 and grp2 to consume.
+- hosts: edge_node1
+  roles:
+  - ranger_modules
+  tasks:
+  - ranger_kafka_policies:
+      state: present
+      admin_url: https://nn1.hdp13.bsa.broadsoftware.com:6182
+      admin_username: admin
+      admin_password: admin
+      validate_certs: no
+      policies: 
+      - name: "kpolicy1"
+        topics: 
+        - "topic1"
+        permissions:
+        - users:
+          - app1 
+          accesses:
+          - Publish
+        - users:
+          - app2
+          groups:
+          - grp1
+          - grp2
+          accesses:
+          - consume
+          
 
+
+# Same result, expressed in a different way
+- hosts: en1
+  vars:
+    policy1:
+      { name: kpolicy1, topics: [ topic1 ], permissions: [ { users: [ app1 ], accesses: [ publish ] }, { users: [ app2 ], groups: [ grp1, grp2 ], accesses: [ consume ] } ] }
+  roles:
+  - ranger_modules
+  tasks:
+  - ranger_kafka_policies:
+      state: present
+      admin_url: https://nn1.hdp13.bsa.broadsoftware.com:6182
+      admin_username: admin
+      admin_password: admin
+      validate_certs: no
+      policies: 
+      - "{{ policy1 }}"
+          
+          
+          
 '''
 import warnings
 from sets import Set
@@ -287,10 +445,10 @@ def groom(policy):
     Check and Normalize target policy expression
     """
     if 'name' not in policy:
-        error("There is an Kafka policy without name!")
+        error("There is at least one Kafka policy without name!")
     prefix = "Kafka policy '{0}': ".format(policy['name'])
 
-    checkValidAttr(policy, ['name', 'topics', 'state', 'recursive', 'audit', 'enabled', 'permissions'], prefix)
+    checkValidAttr(policy, ['name', 'topics', 'state', 'audit', 'enabled', 'permissions'], prefix)
 
     checkListOfStrNotEmpty(policy, "topics", prefix)        
     
