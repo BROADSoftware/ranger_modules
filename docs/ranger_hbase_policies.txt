@@ -1,0 +1,119 @@
+> RANGER_HBASE_POLICIES
+
+  This module will allow you to manage HBase policy in Apache Ranger. Please refer to Apache Ranger documentation for
+  authorization policy concept and usage.
+
+Options (= is mandatory):
+
+= admin_password
+        The password associated with the admin_username
+        [Default: None]
+= admin_url
+        The Ranger base URL to access Ranger API. Same host:port as the Ranger Admin GUI. Typically
+        http://myranger.server.com:6080 or https://myranger.server.com:6182
+        [Default: None]
+= admin_username
+        The user name to log on the Ranger Admin. Must have enough rights to manage policies.
+        [Default: None]
+- ca_bundle_file
+        Useful if Ranger Admin connection is using SSL. Allow to specify a CA_BUNDLE file, a file that contains root and
+        intermediate certificates to validate the Ranger Admin certificate.
+        In its simplest case, it could be a file containing the server certificate in .pem format.
+        This file will be looked up on the remote system, on which this module will be executed.
+        [Default: None]
+= policies
+        The list of policies you want to be defined by this operation.
+        [Default: None]
+- policies[0..n].audit
+        Whether this policy is audited
+        [Default: True]
+= policies[0..n].column_families
+        A list of HBase column families this policy will apply on. Accept wildcard characters '*' and '?'.
+        [Default: None]
+= policies[0..n].columns
+        A list of HBase columns this policy will apply on. Accept wildcard characters '*' and '?'
+        [Default: None]
+- policies[0..n].enabled
+        Whether this policy is enabled.
+        [Default: True]
+= policies[0..n].name
+        The name of the policy. Must be unique across the system.
+        [Default: None]
+= policies[0..n].permissions
+        A list of permissions associated to this policy
+        [Default: None]
+= policies[0..n].permissions[0..n].accesses
+        A list of access right granted by this permission.
+        [Default: None]
+- policies[0..n].permissions[0..n].delegate_admin
+        When a policy is assigned to a user or a group of users those users become the delegated admin. The delegated admin can
+        update, delete the policies.
+        [Default: False]
+- policies[0..n].permissions[0..n].groups
+        A list of groups this permission will apply on.
+        [Default: None]
+- policies[0..n].permissions[0..n].ip_ranges
+        A list of IP address or IP addresses range (In the form XXX.XXX.XXX.XXX/ZZ) to be bound to this permission
+        [Default: None]
+- policies[0..n].permissions[0..n].users
+        A list of users this permission will apply on.
+        [Default: None]
+= policies[0..n].tables
+        A list of HBase tables this policy will apply on. Accept wildcard characters '*' and '?'
+        [Default: None]
+- service_name
+        In most cases, you should not need to set this parameter. It define the Ranger Admin HBase service, typically
+        <yourClusterName>_hbase.
+        It must be set if there are several such services defined in your Ranger Admin configuration, to select the one you
+        intend to use.
+        [Default: None]
+- state
+        Whether to install (present) or remove (absent) these policies
+        (Choices: present, absent)[Default: present]
+- validate_certs
+        Useful if Ranger Admin connection is using SSL. If no, SSL certificates will not be validated. This should only be used
+        on personally controlled sites using self-signed certificates.
+        [Default: True]
+EXAMPLES:
+
+# This playbook snippet will:
+# - Grant full rights to user 'user1' on all table in namespace 'ns1' ('ns1:*'). Including table creation and delegate admin.
+# - Grant RW rights to all users of group 'users' on the table 't1' of this namespace 'ns1'
+#
+# Note also how we handle Certificate bundle, by first copying it on the remote site.
+#
+- hosts: edge_node1
+  roles:
+  - ranger_modules
+  tasks:
+  - name: Copy ca_bundle
+    copy: src=../rangersrv_cert.pem dest=/etc/security/rangersrc_cert.pem owner=root mode=0400
+  - name: Test ranger_hbase
+    ranger_hbase_policies:
+      state: present
+      admin_url: https://nn1.hdp13.bsa.broadsoftware.com:6182
+      admin_username: admin
+      admin_password: admin
+      validate_certs: yes
+      ca_bundle_file: /etc/security/rangersrv_cert.pem
+      policies: 
+      - name: "[ns1]"
+        tables: [ "ns1:*" ]
+        column_families: [ "*" ] 
+        columns: [ "*" ] 
+        permissions: 
+        - users: [ "user1" ]
+          accesses: [ "read", "write", "create", "admin" ]
+          delegate_admin: True
+      - name: "[ns1:t1]"
+        tables: [ "ns1:t1" ]
+        column_families: [ "*" ] 
+        columns: [ "*" ] 
+        permissions: 
+        - groups: [ "users" ]
+          accesses: [ "read", "write" ]
+                    
+          
+
+
+MAINTAINERS: Serge ALEXANDRE

@@ -19,10 +19,10 @@
 
 DOCUMENTATION = '''
 ---
-module: ranger_kafka_policies
-short_description: Manage definition of Kafka Policy in Apache Ranger
+module: ranger_hbase_policies
+short_description: Manage definition of HBase Policy in Apache Ranger
 description:
-     - This module will allow you to manage Kafka policy in Apache Ranger. 
+     - This module will allow you to manage HBase policy in Apache Ranger. 
      - Please refer to Apache Ranger documentation for authorization policy concept and usage.
 options:
   admin_url:
@@ -59,7 +59,7 @@ options:
     aliases: []
   service_name:
     description:
-      - In most cases, you should not need to set this parameter. It define the Ranger Admin Kafka service, typically <yourClusterName>_kafka. 
+      - In most cases, you should not need to set this parameter. It define the Ranger Admin HBase service, typically <yourClusterName>_hbase. 
       - It must be set if there are several such services defined in your Ranger Admin configuration, to select the one you intend to use.  
     required: false
     default: None
@@ -82,9 +82,21 @@ options:
     required: true
     default: None
     aliases: []
-  policies[0..n].topics:
+  policies[0..n].tables:
     description:
-      - A list of Kafka topics this policy will apply on. Accept wildcard characters '*' and '?'
+      - A list of HBase tables this policy will apply on. Accept wildcard characters '*' and '?'
+    required: true
+    default: None
+    aliases: []
+  policies[0..n].column_families:
+    description:
+      - A list of HBase column families this policy will apply on. Accept wildcard characters '*' and '?'.
+    required: true
+    default: None
+    aliases: []
+  policies[0..n].columns:
+    description:
+      - A list of HBase columns this policy will apply on. Accept wildcard characters '*' and '?'
     required: true
     default: None
     aliases: []
@@ -150,55 +162,43 @@ author:
 
 EXAMPLES = '''
 
-# Allow user 'app1' to publish to Kafka topic 'topic1'. And allow user 'app2' and all users belonging to groups 'grp1 and grp2 to consume.
-
+# This playbook snippet will:
+# - Grant full rights to user 'user1' on all table in namespace 'ns1' ('ns1:*'). Including table creation and delegate admin.
+# - Grant RW rights to all users of group 'users' on the table 't1' of this namespace 'ns1'
+#
+# Note also how we handle Certificate bundle, by first copying it on the remote site.
+#
 - hosts: edge_node1
   roles:
   - ranger_modules
   tasks:
-  - ranger_kafka_policies:
+  - name: Copy ca_bundle
+    copy: src=../rangersrv_cert.pem dest=/etc/security/rangersrc_cert.pem owner=root mode=0400
+  - name: Test ranger_hbase
+    ranger_hbase_policies:
       state: present
       admin_url: https://nn1.hdp13.bsa.broadsoftware.com:6182
       admin_username: admin
       admin_password: admin
-      validate_certs: no
+      validate_certs: yes
+      ca_bundle_file: /etc/security/rangersrv_cert.pem
       policies: 
-      - name: "kpolicy1"
-        topics: 
-        - "topic1"
-        permissions:
-        - users:
-          - app1 
-          accesses:
-          - Publish
-        - users:
-          - app2
-          groups:
-          - grp1
-          - grp2
-          accesses:
-          - consume
-          
-
-
-# Same result, expressed in a different way
-- hosts: en1
-  vars:
-    policy1:
-      { name: kpolicy1, topics: [ topic1 ], permissions: [ { users: [ app1 ], accesses: [ publish ] }, { users: [ app2 ], groups: [ grp1, grp2 ], accesses: [ consume ] } ] }
-  roles:
-  - ranger_modules
-  tasks:
-  - ranger_kafka_policies:
-      state: present
-      admin_url: https://nn1.hdp13.bsa.broadsoftware.com:6182
-      admin_username: admin
-      admin_password: admin
-      validate_certs: no
-      policies: 
-      - "{{ policy1 }}"
-          
-          
+      - name: "[ns1]"
+        tables: [ "ns1:*" ]
+        column_families: [ "*" ] 
+        columns: [ "*" ] 
+        permissions: 
+        - users: [ "user1" ]
+          accesses: [ "read", "write", "create", "admin" ]
+          delegate_admin: True
+      - name: "[ns1:t1]"
+        tables: [ "ns1:t1" ]
+        column_families: [ "*" ] 
+        columns: [ "*" ] 
+        permissions: 
+        - groups: [ "users" ]
+          accesses: [ "read", "write" ]
+                    
           
 '''
 import warnings
@@ -440,37 +440,35 @@ def checkValidAttr(base, validAttrSet, prefix):
             error("{0}: Invalid attribute '{1}'. Must be one of {2}".format(prefix, attr, validAttrSet))                           
 
 
-
 def groom(policy):
     """
     Check and Normalize target policy expression
     """
     if 'name' not in policy:
-        error("There is at least one Kafka policy without name!")
+        error("There is at least one HBase policy without name!")
     if not isinstance(policy["name"], basestring):
-        error("Kafka policy: Attribute 'name' if of wrong type. Must by a string")
-    prefix = "Kafka policy '{0}': ".format(policy['name'])
-
-    checkValidAttr(policy, ['name', 'topics', 'state', 'audit', 'enabled', 'permissions'], prefix)
-
-    checkListOfStrNotEmpty(policy, "topics", prefix)        
+        error("HBase policy: Attribute 'name' if of wrong type. Must by a string")
+    prefix = "HBase policy '{0}': ".format(policy['name'])
+        
+    checkValidAttr(policy, ['name', 'tables', 'column_families', 'columns', 'state', 'audit', 'enabled', 'permissions'], prefix)
+        
+    checkListOfStrNotEmpty(policy, "tables", prefix)        
+    checkListOfStrNotEmpty(policy, "column_families", prefix)        
+    checkListOfStrNotEmpty(policy, "columns", prefix)        
     
     checkEnumWithDefault(policy, 'state', Set(['present', 'absent']), 'present', prefix)
-
+    
     checkTypeWithDefault(policy, "audit", bool, True, prefix)
     checkTypeWithDefault(policy, "enabled", bool, True, prefix)
-    
+
     checkTypeWithDefault(policy, "permissions", list, [], prefix)
 
     for permission in policy['permissions']:
-        checkValidAttr(permission, ['users', 'groups', 'accesses', 'ip_ranges', 'delegate_admin'], prefix)
+        checkValidAttr(permission, ['users', 'groups', 'accesses', 'delegate_admin'], prefix)
         checkListOfStr(permission, 'users', prefix)
         checkListOfStr(permission, 'groups', prefix)
         checkListOfStr(permission, 'accesses', prefix)
-        checkListOfStr(permission, 'ip_ranges', prefix)
         checkTypeWithDefault(permission, 'delegate_admin', bool, False, prefix)
-    
-        
 
 
 def newPolicy(tgtPolicy, service):
@@ -484,10 +482,20 @@ def newPolicy(tgtPolicy, service):
         'name': tgtPolicy['name'],
         'policyItems': [],
         'resources': { 
-            "topic": { 
+            "column": { 
                 "isExcludes": False,
                 "isRecursive": False,
-                "values": tgtPolicy["topics"]
+                "values": tgtPolicy["columns"]
+            },
+            "column-family": { 
+                "isExcludes": False,
+                "isRecursive": False,
+                "values": tgtPolicy["column_families"]
+            },
+            "table": { 
+                "isExcludes": False,
+                "isRecursive": False,
+                "values": tgtPolicy["tables"]
             }
         },
         'rowFilterPolicyItems': [],
@@ -502,11 +510,9 @@ def newPolicy(tgtPolicy, service):
         tp['users'] = p['users']
         for a in p['accesses']:
             tp['accesses'].append({ "isAllowed": True, "type": a.lower() })
-        if 'ip_ranges' in p and len(p['ip_ranges']) > 0:
-            tp['conditions'].append({ "type": "ip-range", "values": p['ip_ranges']})
         policy['policyItems'].append(tp)
     return policy
-    
+
     
 rangerAPI = None
 
@@ -568,26 +574,26 @@ def main():
     rangerAPI =  RangerAPI(p.adminUrl, p.adminUsername , p.adminPassword , verify)
 
 
-    kafkaServiceName = rangerAPI.getServiceNameByType("kafka", p.serviceName)
+    hbaseServiceName = rangerAPI.getServiceNameByType("hbase", p.serviceName)
     # Perform check before effective operation
     for tgtPolicy in p.policies:
         groom(tgtPolicy)    
     for tgtPolicy in p.policies:
         policyName = tgtPolicy['name']
-        oldPolicies = rangerAPI.getPolicy(kafkaServiceName, policyName)
+        oldPolicies = rangerAPI.getPolicy(hbaseServiceName, policyName)
         #misc.ppprint(oldPolicies)
         if len(oldPolicies) > 1:
             error("More than one policy with name '{0}' !".format(policyName))
         if p.state == 'present':
             if len(oldPolicies) == 0:
-                policy = newPolicy(tgtPolicy, kafkaServiceName)
+                policy = newPolicy(tgtPolicy, hbaseServiceName)
                 #misc.ppprint(p)
                 rangerAPI.createPolicy(policy)
                 p.changed = True
             else:
                 oldPolicy = oldPolicies[0]
                 pid = oldPolicy["id"]
-                policy = newPolicy(tgtPolicy, kafkaServiceName)
+                policy = newPolicy(tgtPolicy, hbaseServiceName)
                 policy["id"] = pid
                 if isPolicyIdentical(oldPolicy, policy):
                     pass
