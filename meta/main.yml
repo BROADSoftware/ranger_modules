@@ -1,0 +1,14 @@
+galaxy_info:
+  author: Serge ALEXANDRE
+  description: Apache Ranger policy management modules
+  company: BROADSoftware
+  license: GPLv3
+  min_ansible_version: 1.9
+
+  platforms:
+  - name: EL
+    versions:
+    - 7
+
+  galaxy_tags: [ "hdfs", "hadoop", "bigdata", "ranger", "hortonworks" ]
+  dependencies: []
