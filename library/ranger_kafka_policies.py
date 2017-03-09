@@ -124,9 +124,9 @@ options:
     required: True
     default: None
     aliases: []
-  policies[0..n].permissions[0..n].ip_ranges:
+  policies[0..n].permissions[0..n].ip_addresses:
     description:
-      - A list of IP address or IP addresses range (In the form XXX.XXX.XXX.XXX/ZZ) to be bound to this permission
+      - A list of source IP addresses to be bound to this permission
     required: false
     default: None
     aliases: []
@@ -458,11 +458,11 @@ def groom(policy):
     checkTypeWithDefault(policy, "permissions", list, [], prefix)
 
     for permission in policy['permissions']:
-        checkValidAttr(permission, ['users', 'groups', 'accesses', 'ip_ranges', 'delegate_admin'], prefix)
+        checkValidAttr(permission, ['users', 'groups', 'accesses', 'ip_addresses', 'delegate_admin'], prefix)
         checkListOfStr(permission, 'users', prefix)
         checkListOfStr(permission, 'groups', prefix)
         checkListOfStr(permission, 'accesses', prefix)
-        checkListOfStr(permission, 'ip_ranges', prefix)
+        checkListOfStr(permission, 'ip_addresses', prefix)
         checkTypeWithDefault(permission, 'delegate_admin', bool, False, prefix)
     
         
@@ -497,8 +497,8 @@ def newPolicy(tgtPolicy, service):
         tp['users'] = p['users']
         for a in p['accesses']:
             tp['accesses'].append({ "isAllowed": True, "type": a.lower() })
-        if 'ip_ranges' in p and len(p['ip_ranges']) > 0:
-            tp['conditions'].append({ "type": "ip-range", "values": p['ip_ranges']})
+        if 'ip_addresses' in p and len(p['ip_addresses']) > 0:
+            tp['conditions'].append({ "type": "ip-range", "values": p['ip_addresses']})
         policy['policyItems'].append(tp)
     return policy
     

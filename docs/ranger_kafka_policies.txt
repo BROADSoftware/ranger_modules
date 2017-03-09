@@ -1,7 +1,11 @@
-> RANGER_KAFKA_POLICIES
+> RANGER_KAFKA_POLICIES    
 
   This module will allow you to manage Kafka policy in Apache Ranger. Please refer to Apache Ranger documentation for
   authorization policy concept and usage.
+
+Supported by: community
+
+Status: preview
 
 Options (= is mandatory):
 
@@ -46,8 +50,8 @@ Options (= is mandatory):
 - policies[0..n].permissions[0..n].groups
         A list of groups this permission will apply on.
         [Default: None]
-- policies[0..n].permissions[0..n].ip_ranges
-        A list of IP address or IP addresses range (In the form XXX.XXX.XXX.XXX/ZZ) to be bound to this permission
+- policies[0..n].permissions[0..n].ip_addresses
+        A list of source IP addresses to be bound to this permission
         [Default: None]
 - policies[0..n].permissions[0..n].users
         A list of users this permission will apply on.

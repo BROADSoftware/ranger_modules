@@ -1,7 +1,11 @@
-> RANGER_HBASE_POLICIES
+> RANGER_HBASE_POLICIES    
 
   This module will allow you to manage HBase policy in Apache Ranger. Please refer to Apache Ranger documentation for
   authorization policy concept and usage.
+
+Supported by: community
+
+Status: preview
 
 Options (= is mandatory):
 
