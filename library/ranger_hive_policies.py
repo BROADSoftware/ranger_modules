@@ -19,10 +19,10 @@
 
 DOCUMENTATION = '''
 ---
-module: ranger_kafka_policies
-short_description: Manage definition of Kafka Policy in Apache Ranger
+module: ranger_hive_policies
+short_description: Manage definition of hive Policy in Apache Ranger
 description:
-     - This module will allow you to manage Kafka policy in Apache Ranger. 
+     - This module will allow you to manage Hive policy in Apache Ranger. 
      - Please refer to Apache Ranger documentation for authorization policy concept and usage.
 options:
   admin_url:
@@ -59,7 +59,7 @@ options:
     aliases: []
   service_name:
     description:
-      - In most cases, you should not need to set this parameter. It define the Ranger Admin Kafka service, typically <yourClusterName>_kafka. 
+      - In most cases, you should not need to set this parameter. It define the Ranger Admin Hive service, typically <yourClusterName>_hive. 
       - It must be set if there are several such services defined in your Ranger Admin configuration, to select the one you intend to use.  
     required: false
     default: None
@@ -82,9 +82,27 @@ options:
     required: true
     default: None
     aliases: []
-  policies[0..n].topics:
+  policies[0..n].databases:
     description:
-      - A list of Kafka topics this policy will apply on. Accept wildcard characters '*' and '?'
+      - A list of Hive databases this policy will apply on. Accept wildcard characters '*' and '?'
+    required: true
+    default: None
+    aliases: []
+  policies[0..n].tables:
+    description:
+      - A list of Hive tables this policy will apply on. Accept wildcard characters '*' and '?'. This is exclusive of 'udfs'
+    required: true
+    default: None
+    aliases: []
+  policies[0..n].columns:
+    description:
+      - A list of Hive columns this policy will apply on. Accept wildcard characters '*' and '?'. This is exclusive of 'udfs'
+    required: true
+    default: None
+    aliases: []
+  policies[0..n].udfs:
+    description:
+      - A list of Hive UDFs this policy will apply on. Accept wildcard characters '*' and '?'. This is exclusive of 'tables' and 'columns'
     required: true
     default: None
     aliases: []
@@ -124,19 +142,13 @@ options:
     required: True
     default: None
     aliases: []
-  policies[0..n].permissions[0..n].ip_addresses:
-    description:
-      - A list of source IP addresses to be bound to this permission
-    required: false
-    default: None
-    aliases: []
   policies[0..n].permissions[0..n].delegate_admin:
     description:
       - When a policy is assigned to a user or a group of users those users become the delegated admin. The delegated admin can update, delete the policies. 
     required: false
     default: False
     aliases: []
-      
+    
 author:
     - "Serge ALEXANDRE"
 
@@ -145,55 +157,50 @@ author:
 
 EXAMPLES = '''
 
-# Allow user 'app1' to publish to Kafka topic 'topic1'. And allow user 'app2' and all users belonging to groups 'grp1 and grp2 to consume.
-
+# This playbook snippet will:
+# - For all columns of all tables of databases mydb and mydb2:
+#   - select, and update on all users of group 'users'
+#   - Full accesses including admin rights to the user 'admin' 
+#
+# Note also how we handle Certificate bundle, by first copying it on the remote site.
+#
 - hosts: edge_node1
   roles:
   - ranger_modules
   tasks:
-  - ranger_kafka_policies:
+  - name: Copy ca_bundle
+    copy: src=../rangersrv_cert.pem dest=/etc/security/rangersrc_cert.pem owner=root mode=0400
+  - name: Apply ranger Hive policy
+    ranger_hive_policies:
       state: present
       admin_url: https://ranger.mycompany.com:6182
       admin_username: admin
       admin_password: admin
-      validate_certs: no
+      validate_certs: yes
+      ca_bundle_file: /etc/security/rangersrv_cert.pem
       policies: 
-      - name: "kpolicy1"
-        topics: 
-        - "topic1"
+      - name: "testdb_testtable1"
+        databases:
+        - mydb
+        - mydb2
+        tables:
+        - "*"
+        columns:
+        - "*"
+        audit: false
+        enabled: false
         permissions:
-        - users:
-          - app1 
+        - groups:
+          - users
           accesses:
-          - Publish
+          - select
+          - update
         - users:
-          - app2
-          groups:
-          - grp1
-          - grp2
+          - admin
           accesses:
-          - consume
-          
-
-
-# Same result, expressed in a different way
-- hosts: en1
-  vars:
-    policy1:
-      { name: kpolicy1, topics: [ topic1 ], permissions: [ { users: [ app1 ], accesses: [ publish ] }, { users: [ app2 ], groups: [ grp1, grp2 ], accesses: [ consume ] } ] }
-  roles:
-  - ranger_modules
-  tasks:
-  - ranger_kafka_policies:
-      state: present
-      admin_url: https://nn1.hdp13.bsa.broadsoftware.com:6182
-      admin_username: admin
-      admin_password: admin
-      validate_certs: no
-      policies: 
-      - "{{ policy1 }}"
-          
-          
+          - all
+          delegate_admin: true
+                    
           
 '''
 import warnings
@@ -435,36 +442,43 @@ def checkValidAttr(base, validAttrSet, prefix):
             error("{0}: Invalid attribute '{1}'. Must be one of {2}".format(prefix, attr, validAttrSet))                           
 
 
-
 def groom(policy):
     """
     Check and Normalize target policy expression
     """
     if 'name' not in policy:
-        error("There is at least one Kafka policy without name!")
+        error("There is at least one Hive policy without name!")
     if not isinstance(policy["name"], basestring):
-        error("Kafka policy: Attribute 'name' if of wrong type. Must by a string")
-    prefix = "Kafka policy '{0}': ".format(policy['name'])
+        error("Hive policy: Attribute 'name' if of wrong type. Must by a string")
+    prefix = "Hive policy '{0}': ".format(policy['name'])
 
-    checkValidAttr(policy, ['name', 'topics', 'audit', 'enabled', 'permissions'], prefix)
 
-    checkListOfStrNotEmpty(policy, "topics", prefix)        
-    
+    checkValidAttr(policy, ['name', 'tables', 'udfs', 'databases', 'columns', 'state', 'audit', 'enabled', 'permissions'], prefix)
+
+    checkListOfStrNotEmpty(policy, "databases", prefix)        
+    if 'tables' in policy:        
+        checkListOfStrNotEmpty(policy, "tables", prefix)        
+        checkListOfStrNotEmpty(policy, "columns", prefix)
+        if 'udfs' in policy:
+            error("{0}: 'tables' and 'udfs' are exclusive!".format(prefix))
+    else:
+        if not 'udfs' in policy:
+            error("{0}: One of 'tables' and 'udfs' must be defined!".format(prefix))
+        else:
+            checkListOfStrNotEmpty(policy, "udfs", prefix)
+
     checkTypeWithDefault(policy, "audit", bool, True, prefix)
     checkTypeWithDefault(policy, "enabled", bool, True, prefix)
-    
+
     checkTypeWithDefault(policy, "permissions", list, [], prefix)
 
     for permission in policy['permissions']:
-        checkValidAttr(permission, ['users', 'groups', 'accesses', 'ip_addresses', 'delegate_admin'], prefix)
+        checkValidAttr(permission, ['users', 'groups', 'accesses', 'delegate_admin'], prefix)
         checkListOfStr(permission, 'users', prefix)
         checkListOfStr(permission, 'groups', prefix)
         checkListOfStr(permission, 'accesses', prefix)
-        checkListOfStr(permission, 'ip_addresses', prefix)
         checkTypeWithDefault(permission, 'delegate_admin', bool, False, prefix)
     
-        
-
 
 def newPolicy(tgtPolicy, service):
     policy = {
@@ -477,15 +491,20 @@ def newPolicy(tgtPolicy, service):
         'name': tgtPolicy['name'],
         'policyItems': [],
         'resources': { 
-            "topic": { 
+            "database": { 
                 "isExcludes": False,
                 "isRecursive": False,
-                "values": tgtPolicy["topics"]
+                "values": tgtPolicy["databases"]
             }
         },
         'rowFilterPolicyItems': [],
         'service': service
     }
+    if 'udfs' in tgtPolicy and len(tgtPolicy['udfs']) > 0:
+        policy['resources']['udf'] = { "isExcludes": False, "isRecursive": False, "values": tgtPolicy["udfs"]  }
+    if 'tables' in tgtPolicy and len(tgtPolicy['tables']) > 0:
+        policy['resources']['table'] = { "isExcludes": False, "isRecursive": False, "values": tgtPolicy["tables"]  }
+        policy['resources']['column'] = { "isExcludes": False, "isRecursive": False, "values": tgtPolicy["columns"]  }
     for p in tgtPolicy['permissions']:
         tp = {}
         tp['accesses'] = []
@@ -495,11 +514,9 @@ def newPolicy(tgtPolicy, service):
         tp['users'] = p['users']
         for a in p['accesses']:
             tp['accesses'].append({ "isAllowed": True, "type": a.lower() })
-        if 'ip_addresses' in p and len(p['ip_addresses']) > 0:
-            tp['conditions'].append({ "type": "ip-range", "values": p['ip_addresses']})
         policy['policyItems'].append(tp)
     return policy
-    
+
     
 rangerAPI = None
 
@@ -561,20 +578,20 @@ def main():
     rangerAPI =  RangerAPI(p.adminUrl, p.adminUsername , p.adminPassword , verify)
 
     result = {}
-    kafkaServiceName = rangerAPI.getServiceNameByType("kafka", p.serviceName)
+    hiveServiceName = rangerAPI.getServiceNameByType("hive", p.serviceName)
     # Perform check before effective operation
     for tgtPolicy in p.policies:
         groom(tgtPolicy)    
     for tgtPolicy in p.policies:
         policyName = tgtPolicy['name']
         result[policyName] = {}
-        oldPolicies = rangerAPI.getPolicy(kafkaServiceName, policyName)
+        oldPolicies = rangerAPI.getPolicy(hiveServiceName, policyName)
         #misc.ppprint(oldPolicies)
         if len(oldPolicies) > 1:
             error("More than one policy with name '{0}' !".format(policyName))
         if p.state == 'present':
             if len(oldPolicies) == 0:
-                policy = newPolicy(tgtPolicy, kafkaServiceName)
+                policy = newPolicy(tgtPolicy, hiveServiceName)
                 #misc.ppprint(p)
                 rangerAPI.createPolicy(policy)
                 result[policyName]['action'] = "created"
@@ -582,7 +599,7 @@ def main():
             else:
                 oldPolicy = oldPolicies[0]
                 pid = oldPolicy["id"]
-                policy = newPolicy(tgtPolicy, kafkaServiceName)
+                policy = newPolicy(tgtPolicy, hiveServiceName)
                 policy["id"] = pid
                 result[policyName]['id'] = pid
                 if isPolicyIdentical(oldPolicy, policy):

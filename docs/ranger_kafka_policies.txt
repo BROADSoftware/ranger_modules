@@ -1,11 +1,7 @@
-> RANGER_KAFKA_POLICIES    
+> RANGER_KAFKA_POLICIES
 
   This module will allow you to manage Kafka policy in Apache Ranger. Please refer to Apache Ranger documentation for
   authorization policy concept and usage.
-
-Supported by: community
-
-Status: preview
 
 Options (= is mandatory):
 

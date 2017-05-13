@@ -1,6 +1,6 @@
-> RANGER_HDFS_POLICIES
+> RANGER_HIVE_POLICIES
 
-  This module will allow you to manage HDFS policy in Apache Ranger. Please refer to Apache Ranger documentation for
+  This module will allow you to manage Hive policy in Apache Ranger. Please refer to Apache Ranger documentation for
   authorization policy concept and usage.
 
 Options (= is mandatory):
@@ -27,14 +27,17 @@ Options (= is mandatory):
 - policies[0..n].audit
         Whether this policy is audited
         [Default: True]
+= policies[0..n].columns
+        A list of Hive columns this policy will apply on. Accept wildcard characters '*' and '?'. This is exclusive of 'udfs'
+        [Default: None]
+= policies[0..n].databases
+        A list of Hive databases this policy will apply on. Accept wildcard characters '*' and '?'
+        [Default: None]
 - policies[0..n].enabled
         Whether this policy is enabled.
         [Default: True]
 = policies[0..n].name
         The name of the policy. Must be unique across the system.
-        [Default: None]
-= policies[0..n].paths
-        A list of HDFS path this policy will apply on. Accept wildcard characters '*' and '?'
         [Default: None]
 = policies[0..n].permissions
         A list of permissions associated to this policy
@@ -52,12 +55,16 @@ Options (= is mandatory):
 - policies[0..n].permissions[0..n].users
         A list of users this permission will apply on.
         [Default: None]
-- policies[0..n].recursive
-        Whether this policy is recursive
-        [Default: True]
+= policies[0..n].tables
+        A list of Hive tables this policy will apply on. Accept wildcard characters '*' and '?'. This is exclusive of 'udfs'
+        [Default: None]
+= policies[0..n].udfs
+        A list of Hive UDFs this policy will apply on. Accept wildcard characters '*' and '?'. This is exclusive of 'tables' and
+        'columns'
+        [Default: None]
 - service_name
-        In most cases, you should not need to set this parameter. It define the Ranger Admin HDFS service, typically
-        <yourClusterName>_hadoop.
+        In most cases, you should not need to set this parameter. It define the Ranger Admin Hive service, typically
+        <yourClusterName>_hive.
         It must be set if there are several such services defined in your Ranger Admin configuration, to select the one you
         intend to use.
         [Default: None]
@@ -70,30 +77,50 @@ Options (= is mandatory):
         [Default: True]
 EXAMPLES:
 
-# Grant full rights for user 'coxi' on folders '/apps/coxi01' and '/user/coxi01', in a recursive way
-
+# This playbook snippet will:
+# - For all columns of all tables of databases mydb and mydb2:
+#   - select, and update on all users of group 'users'
+#   - Full accesses including admin rights to the user 'admin' 
+#
+# Note also how we handle Certificate bundle, by first copying it on the remote site.
+#
 - hosts: edge_node1
   roles:
   - ranger_modules
   tasks:
-  - ranger_hdfs_policies:
+  - name: Copy ca_bundle
+    copy: src=../rangersrv_cert.pem dest=/etc/security/rangersrc_cert.pem owner=root mode=0400
+  - name: Apply ranger Hive policy
+    ranger_hive_policies:
       state: present
-      admin_url: http://ranger.mycompany.com:6080
+      admin_url: https://ranger.mycompany.com:6182
       admin_username: admin
       admin_password: admin
-      policies:
-      - name: "coxi01"
-        paths: 
-        - "/apps/coxi01" 
-        - "/user/coxi01" 
+      validate_certs: yes
+      ca_bundle_file: /etc/security/rangersrv_cert.pem
+      policies: 
+      - name: "testdb_testtable1"
+        databases:
+        - mydb
+        - mydb2
+        tables:
+        - "*"
+        columns:
+        - "*"
+        audit: false
+        enabled: false
         permissions:
-        - users:
-          - coxi
+        - groups:
+          - users
           accesses:
-          - Write
-          - read
-          - execute
-
+          - select
+          - update
+        - users:
+          - admin
+          accesses:
+          - all
+          delegate_admin: true
+                    
           
 
 

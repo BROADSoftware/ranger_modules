@@ -439,13 +439,11 @@ def groom(policy):
         error("HBase policy: Attribute 'name' if of wrong type. Must by a string")
     prefix = "HBase policy '{0}': ".format(policy['name'])
         
-    checkValidAttr(policy, ['name', 'tables', 'column_families', 'columns', 'state', 'audit', 'enabled', 'permissions'], prefix)
+    checkValidAttr(policy, ['name', 'tables', 'column_families', 'columns', 'audit', 'enabled', 'permissions'], prefix)
         
     checkListOfStrNotEmpty(policy, "tables", prefix)        
     checkListOfStrNotEmpty(policy, "column_families", prefix)        
     checkListOfStrNotEmpty(policy, "columns", prefix)        
-    
-    checkEnumWithDefault(policy, 'state', Set(['present', 'absent']), 'present', prefix)
     
     checkTypeWithDefault(policy, "audit", bool, True, prefix)
     checkTypeWithDefault(policy, "enabled", bool, True, prefix)
