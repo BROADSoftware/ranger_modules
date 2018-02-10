@@ -192,7 +192,23 @@ except (ImportError, AttributeError):
 
 # Global, to allow access from error
 module = None
-
+logs = []
+logLevel = 'None'
+ 
+    
+def log(level, message):
+    x = level+':' + message
+    logs.append(x)
+        
+def debug(message):
+    if logLevel == 'debug' or logLevel == "info":
+        log("DEBUG", message)
+ 
+def info(message):
+    if logLevel == "info" :
+        log("INFO", message)
+ 
+ 
 class RangerAPI:
     
     def __init__(self, endpoint, username, password, verify):
@@ -209,6 +225,7 @@ class RangerAPI:
     def get(self, path):
         url = self.endpoint + "/" + path
         resp = requests.get(url, auth = self.auth, verify=self.verify)
+        debug("HTTP GET({})  --> {}".format(url, resp.status_code))
         if resp.status_code == 200:
             result = resp.json()
             return result
@@ -243,18 +260,21 @@ class RangerAPI:
     def createPolicy(self, policy):
         url = self.endpoint + '/service/public/v2/api/policy'
         resp = requests.post(url, auth = self.auth, json=policy, headers={'content-type': 'application/json'}, verify=self.verify)
+        debug("HTTP POST({})  --> {}".format(url, resp.status_code))        
         if resp.status_code != 200:
             error("Invalid returned http code '{0}' when calling POST on '{1}': {2}".format(resp.status_code, url, resp.text))
         
     def deletePolicy(self, pid):
         url = "{0}/service/public/v2/api/policy/{1}".format(self.endpoint, pid)
         resp = requests.delete(url, auth = self.auth, verify=self.verify)
+        debug("HTTP DELETE({})  --> {}".format(url, resp.status_code))        
         if resp.status_code < 200 and resp.status_code > 299:
             error("Invalid returned http code '{0}' when calling DELETE on '{1}: {2}'".format(resp.status_code, url, resp.text))
             
     def updatePolicy(self, policy):
         url = "{0}/service/public/v2/api/policy/{1}".format(self.endpoint, policy["id"])
         resp = requests.put(url, auth = self.auth, json=policy, headers={'content-type': 'application/json'}, verify=self.verify)
+        debug("HTTP PUT({})  --> {}".format(url, resp.status_code))        
         if resp.status_code != 200:
             error("Invalid returned http code '{0}' when calling PUT on '{1}': {2}".format(resp.status_code, url, resp.text))
     
@@ -351,12 +371,16 @@ def diffList(left, right, path, result):
 # ---------------------------------------------------------------------------------
 
 
-ALLOWED_MISSING_ON_RIGHT = Set([".version", ".policyType"])
+ALLOWED_MISSING_ON_RIGHT = Set([".version", ".policyType", ".guid"])
 
 def isPolicyIdentical(old, new):
     result = digdiff(old, new)
     #misc.ppprint(old)
     #misc.ppprint(new)
+    debug("missingOnLeft:{}".format(result['missingOnLeft']))
+    debug("missingOnRight:{}".format(result['missingOnRight']))
+    debug("differsByType:{}".format(result['differsByType']))
+    debug("differsByValue:{}".format(result['differsByValue']))
     if len(result['missingOnLeft']) > 0 or len(result['differsByType']) > 0 or len(result['differsByValue']) > 0:
         return False
     else:
@@ -485,7 +509,7 @@ def cleanup():
 
 def error(message):
     cleanup()
-    module.fail_json(msg = message)    
+    module.fail_json(msg = message, logs=logs)    
 
 class Parameters:
     pass
@@ -506,7 +530,8 @@ def main():
             validate_certs = dict(required=False, type='bool', default=True),
             ca_bundle_file = dict(required=False, type='str'),
             service_name = dict(required=False, type='str'),
-            policies = dict(required=True, type='list')
+            policies = dict(required=True, type='list'),
+            log_level = dict(required=False, default="None")
         ),
         supports_check_mode=True
     )
@@ -523,8 +548,12 @@ def main():
     p.ca_bundleFile = module.params['ca_bundle_file']
     p.serviceName = module.params['service_name']
     p.policies = module.params['policies']
+    p.logLevel = module.params['log_level']
     p.changed = False
 
+    global  logLevel
+    logLevel = p.logLevel
+    
     checkParameters(p)
     
     if p.ca_bundleFile != None:
@@ -544,6 +573,7 @@ def main():
         policyName = tgtPolicy['name']
         result[policyName] = {}
         oldPolicies = rangerAPI.getPolicy(hdfsServiceName, policyName)
+        debug("oldPolicies: " + repr(oldPolicies))
         #misc.ppprint(oldPolicies)
         if len(oldPolicies) > 1:
             error("More than one policy with name '{0}' !".format(policyName))
@@ -578,7 +608,8 @@ def main():
     cleanup()
     module.exit_json(
         changed = p.changed,
-        policies = result
+        policies = result,
+        logs = logs
     )
 
 
