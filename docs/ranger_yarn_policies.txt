@@ -1,4 +1,4 @@
-> RANGER_YARN_POLICIES
+> RANGER_YARN_POLICIES    
 
   This module will allow you to manage Yarn policy in Apache Ranger. Please refer to Apache Ranger documentation for
   authorization policy concept and usage.
@@ -110,3 +110,7 @@ EXAMPLES:
 
 
 MAINTAINERS: Serge ALEXANDRE
+
+METADATA:
+	Status: ['preview']
+	Supported_by: community

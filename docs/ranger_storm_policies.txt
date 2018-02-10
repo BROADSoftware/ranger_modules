@@ -1,6 +1,6 @@
-> RANGER_KAFKA_POLICIES    
+> RANGER_STORM_POLICIES    
 
-  This module will allow you to manage Kafka policy in Apache Ranger. Please refer to Apache Ranger documentation for
+  This module will allow you to manage Storm policies in Apache Ranger. Please refer to Apache Ranger documentation for
   authorization policy concept and usage.
 
 Options (= is mandatory):
@@ -46,18 +46,15 @@ Options (= is mandatory):
 - policies[0..n].permissions[0..n].groups
         A list of groups this permission will apply on.
         [Default: None]
-- policies[0..n].permissions[0..n].ip_addresses
-        A list of source IP addresses to be bound to this permission
-        [Default: None]
 - policies[0..n].permissions[0..n].users
         A list of users this permission will apply on.
         [Default: None]
-= policies[0..n].topics
-        A list of Kafka topics this policy will apply on. Accept wildcard characters '*' and '?'
+= policies[0..n].topologies
+        A list of Storm topologies this policy will apply on. Accept wildcard characters '*' and '?'
         [Default: None]
 - service_name
-        In most cases, you should not need to set this parameter. It define the Ranger Admin Kafka service, typically
-        <yourClusterName>_kafka.
+        In most cases, you should not need to set this parameter. It define the Ranger Admin Storm service, typically
+        <yourClusterName>_storm.
         It must be set if there are several such services defined in your Ranger Admin configuration, to select the one you
         intend to use.
         [Default: None]
@@ -70,55 +67,58 @@ Options (= is mandatory):
         [Default: True]
 EXAMPLES:
 
-# Allow user 'app1' to publish to Kafka topic 'topic1'. And allow user 'app2' and all users belonging to groups 'grp1 and grp2 to consume.
-
 - hosts: edge_node1
+  vars: 
+    stormAdminAccesses: 
+      - 'submitTopology'
+      - 'fileUpload'
+      - 'fileDownload'
+      - 'killTopology'
+      - 'rebalance'
+      - 'activate'
+      - 'deactivate'
+      - 'getTopologyConf'
+      - 'getTopology'
+      - 'getUserTopology'
+      - 'getTopologyInfo'
+      - 'uploadNewCredentials'
   roles:
   - ranger_modules
   tasks:
-  - ranger_kafka_policies:
+  - name: Copy ca_bundle
+    copy: src=../hdp13_ranger_cert.pem dest=/etc/security/hdp13_ranger_cert.pem owner=root mode=0400
+  
+  - name: Test ranger_yarn
+    ranger_storm_policies:
       state: present
       admin_url: https://ranger.mycompany.com:6182
       admin_username: admin
       admin_password: admin
       validate_certs: no
-      policies: 
-      - name: "kpolicy1"
-        topics: 
-        - "topic1"
+      policies:
+      - name: test3
+        topologies:
+        - topology1
+        audit: true
+        enabled: true
         permissions:
         - users:
-          - app1 
-          accesses:
-          - Publish
-        - users:
-          - app2
-          groups:
+          - jim
+          - john
+          groups: 
           - grp1
-          - grp2
           accesses:
-          - consume
-          
-
-
-# Same result, expressed in a different way
-- hosts: en1
-  vars:
-    policy1:
-      { name: kpolicy1, topics: [ topic1 ], permissions: [ { users: [ app1 ], accesses: [ publish ] }, { users: [ app2 ], groups: [ grp1, grp2 ], accesses: [ consume ] } ] }
-  roles:
-  - ranger_modules
-  tasks:
-  - ranger_kafka_policies:
-      state: present
-      admin_url: https://nn1.hdp13.bsa.broadsoftware.com:6182
-      admin_username: admin
-      admin_password: admin
-      validate_certs: no
-      policies: 
-      - "{{ policy1 }}"
-          
-          
+          - submitTopology
+          - killTopology
+          - activate
+          - deactivate
+          - getTopology
+        - users:
+          - admin 
+          accesses: "{{ stormAdminAccesses }}"
+          delegate_admin: true
+    no_log: True
+      
           
 
 

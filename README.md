@@ -8,6 +8,10 @@ This ansible role host a set of modules aimed to manipulate policies on Apache R
 
 * ranger\_kafka\_policies: Allow creation/deletion/update of Kafka Ranger policies. Doc [at this location](docs/ranger_kafka_policies.txt)
 
+* ranger\_yarn\_policies: Allow creation/deletion/update of Yarn Ranger policies. Doc [at this location](docs/ranger_yarn_policies.txt)
+
+* ranger\_storm\_policies: Allow creation/deletion/update of Storm Ranger policies. Doc [at this location](docs/ranger_storm_policies.txt)
+
 ## Requirements
 
 These modules need the python-requests package to be present on the remote node.

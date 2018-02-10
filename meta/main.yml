@@ -10,5 +10,5 @@ galaxy_info:
     versions:
     - 7
 
-  galaxy_tags: [ "hdfs", "hadoop", "bigdata", "ranger", "hortonworks" ]
+  galaxy_tags: [ "hdfs", "hadoop", "bigdata", "ranger", "hortonworks", "yarn", "kafka", "storm", "hbase", "hive" ]
   dependencies: []
