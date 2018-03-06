@@ -287,7 +287,7 @@ class RangerAPI:
         url = "{0}/service/public/v2/api/policy/{1}".format(self.endpoint, pid)
         resp = requests.delete(url, auth = self.auth, verify=self.verify)
         debug("HTTP DELETE({})  --> {}".format(url, resp.status_code))        
-        if resp.status_code < 200 and resp.status_code > 299:
+        if resp.status_code < 200 or resp.status_code > 299:
             error("Invalid returned http code '{0}' when calling DELETE on '{1}: {2}'".format(resp.status_code, url, resp.text))
             
     def updatePolicy(self, policy):
