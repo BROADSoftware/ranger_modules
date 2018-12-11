@@ -533,7 +533,7 @@ def main():
             policies = dict(required=True, type='list'),
             log_level = dict(required=False, default="None")
         ),
-        supports_check_mode=True
+        supports_check_mode=False
     )
     
     if not HAS_REQUESTS:
