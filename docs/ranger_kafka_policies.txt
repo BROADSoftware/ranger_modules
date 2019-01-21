@@ -16,6 +16,9 @@ OPTIONS (= is mandatory):
 
 = admin_username
         The user name to log on the Ranger Admin. Must have enough rights to manage policies.
+        Also accepts the special value `KERBEROS'. In such case, a valid Kerberos ticket must exist for the ansible_user account
+        on the target system. (A `kinit' must be issued under this account). Then HDFS operation will be performed on behalf of
+        the user defined by the Kerberos ticket.
         [Default: None]
 
 - ca_bundle_file

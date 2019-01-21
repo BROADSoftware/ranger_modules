@@ -182,7 +182,6 @@ import warnings
 from sets import Set
 
 HAS_REQUESTS = False
-
 try:
     import requests                            
     from requests.auth import HTTPBasicAuth
@@ -191,7 +190,6 @@ except (ImportError, AttributeError):
     # AttributeError if __version__ is not present
     pass
 
-
 HAS_KERBEROS = False
 try:
     from requests_kerberos import HTTPKerberosAuth
@@ -199,25 +197,22 @@ try:
 except ImportError:
     pass
 
-
 # Global, to allow access from error
 module = None
 logs = []
 logLevel = 'None'
- 
     
 def log(level, message):
     x = level+':' + message
     logs.append(x)
         
 def debug(message):
-    if logLevel == 'debug' or logLevel == "info":
+    if logLevel == 'debug':
         log("DEBUG", message)
  
 def info(message):
-    if logLevel == "info" :
+    if logLevel == "info"  or logLevel == "debug":
         log("INFO", message)
- 
  
 class RangerAPI:
     
@@ -237,7 +232,6 @@ class RangerAPI:
             warnings.filterwarnings("ignore", ".*Unverified HTTPS.*")
             warnings.filterwarnings("ignore", ".*Certificate has no `subjectAltName`.*")
 
-    
     def get(self, path):
         url = self.endpoint + "/" + path
         resp = requests.get(url, auth = self.auth, verify=self.verify)
@@ -256,8 +250,6 @@ class RangerAPI:
             error("KERBEROS authentication failed! (Did you perform kinit ?)")
         else:
             error("Invalid returned http code '{0}' when calling GET on '{1}'".format(resp.status_code, url))
-
-
     
     def getServiceNameByType(self, stype, candidate=None):
         if self.serviceNamesByType == None:

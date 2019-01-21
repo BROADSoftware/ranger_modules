@@ -18,10 +18,10 @@
 # Required by hdfs_file, hdfs_cmd and hdfs_info
 
 - name: Install python-requests for ranger_xxxxx_policies ansibles modules (RedHat)
-  yum: name=python-requests state=present
+  yum: name=python-requests,python-requests-kerberos state=present
   when: ansible_os_family == 'RedHat'
 
 - name: Install python-requests for ranger_xxxxx_policies ansibles modules (Debian)
-  apt: name=python-requests state=present
+  apt: name=python-requests,python-requests-kerberos state=present
   when: ansible_os_family == 'Debian'
   

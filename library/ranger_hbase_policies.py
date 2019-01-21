@@ -34,6 +34,8 @@ options:
   admin_username:
     description:
       - The user name to log on the Ranger Admin. Must have enough rights to manage policies.
+      - Also accepts the special value C(KERBEROS). In such case, a valid Kerberos ticket must exist for the ansible_user account on the target system. (A C(kinit) must be issued under this account). 
+        Then HDFS operation will be performed on behalf of the user defined by the Kerberos ticket.
     required: true
     default: None
     aliases: []
@@ -194,7 +196,6 @@ import warnings
 from sets import Set
 
 HAS_REQUESTS = False
-
 try:
     import requests
     from requests.auth import HTTPBasicAuth
@@ -203,23 +204,28 @@ except (ImportError, AttributeError):
     # AttributeError if __version__ is not present
     pass
 
+HAS_KERBEROS = False
+try:
+    from requests_kerberos import HTTPKerberosAuth
+    HAS_KERBEROS = True
+except ImportError:
+    pass
 
 # Global, to allow access from error
 module = None
 logs = []
 logLevel = 'None'
- 
     
 def log(level, message):
     x = level+':' + message
     logs.append(x)
         
 def debug(message):
-    if logLevel == 'debug' or logLevel == "info":
+    if logLevel == 'debug':
         log("DEBUG", message)
  
 def info(message):
-    if logLevel == "info" :
+    if logLevel == "info"  or logLevel == "debug":
         log("INFO", message)
  
 class RangerAPI:
@@ -230,21 +236,34 @@ class RangerAPI:
         self.password = password
         self.verify = verify
         self.serviceNamesByType = None
-        self.auth = HTTPBasicAuth(self.username, self.password)
-        warnings.filterwarnings("ignore", ".*Unverified HTTPS.*")
-        warnings.filterwarnings("ignore", ".*Certificate has no `subjectAltName`.*")
-
+        if self.username == "KERBEROS":
+            if not HAS_KERBEROS:
+                error("'python-requests-kerberos' package is not installed")
+            else:
+                self.auth = HTTPKerberosAuth()            
+        else:
+            self.auth = HTTPBasicAuth(self.username, self.password)
+            warnings.filterwarnings("ignore", ".*Unverified HTTPS.*")
+            warnings.filterwarnings("ignore", ".*Certificate has no `subjectAltName`.*")
     
     def get(self, path):
         url = self.endpoint + "/" + path
         resp = requests.get(url, auth = self.auth, verify=self.verify)
         debug("HTTP GET({})  --> {}".format(url, resp.status_code))
-        if resp.status_code == 200:
-            result = resp.json()
-            return result
+        if resp.status_code == 200:     # Warning: Failing auth may trigger a 200 with an HTML login page.
+            contentType = resp.headers["content-type"] if ("content-type" in resp.headers) else "unknow" 
+            debug("Response content-type:{}".format(contentType))
+            if "json" in contentType:
+                result = resp.json()
+                return result
+            elif contentType.startswith("text/html"):
+                error("HTML content received. May be Ranger login or password is invalid!")
+            else:
+                error("Invalid 'content-type' ({}) in response".format(contentType))
+        elif resp.status_code == 401 and self.username == "KERBEROS":
+            error("KERBEROS authentication failed! (Did you perform kinit ?)")
         else:
             error("Invalid returned http code '{0}' when calling GET on '{1}'".format(resp.status_code, url))
-    
     
     def getServiceNameByType(self, stype, candidate=None):
         if self.serviceNamesByType == None:
