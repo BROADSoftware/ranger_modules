@@ -240,7 +240,6 @@ class RangerAPI:
             error("Invalid returned http code '{0}' when calling GET on '{1}'".format(resp.status_code, url))
     
     
-    
     def getServiceNameByType(self, stype, candidate=None):
         if self.serviceNamesByType == None:
             self.serviceNamesByType = {}
